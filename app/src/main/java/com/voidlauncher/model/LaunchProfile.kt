@@ -24,6 +24,4 @@ data class ProfileStore(
 data class LaunchSettings(
     val memoryMb: Int = 2048,
     val jvmArgs: String = "",
-    val autoSelectRuntime: Boolean = true,
-    val checkAssets: Boolean = true,
 )

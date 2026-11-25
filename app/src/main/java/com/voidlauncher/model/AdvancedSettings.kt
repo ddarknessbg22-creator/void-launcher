@@ -7,8 +7,6 @@ import kotlinx.serialization.Serializable
 data class AdvancedSettings(
     // Which native engine is preferred (this is a real effect: it changes the launched app).
     val glImplementation: String = "MobileGlues",
-    val launchMode: String = "Isolated",
-    val isolateGameDirectory: Boolean = true,
 
     // Java runtime selection.
     val javaMode: String = "Auto",
@@ -19,5 +17,4 @@ data class AdvancedSettings(
     val verifyDownloads: Boolean = true,
     val autoRetry: Boolean = true,
     val downloadThreads: Int = 4,
-    val checkEngineUpdates: Boolean = true,
 )

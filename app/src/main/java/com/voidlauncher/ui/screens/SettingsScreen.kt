@@ -206,12 +206,6 @@ private fun GameTab(state: UiState, vm: VoidViewModel) {
     MonoCard {
         OptRow("OpenGL implementation", state.advanced.glImplementation) { vm.setGlImplementation(listOf("MobileGlues", "ANGLE", "GL4ES").next(state.advanced.glImplementation)) }
         DividerLine()
-        OptRow("Launch mode", state.advanced.launchMode) {
-            vm.updateAdvanced { a -> a.copy(launchMode = listOf("Normal", "Isolated").next(a.launchMode)) }
-        }
-        DividerLine()
-        SwitchRow("Isolate working directory", "Separate game folder per version",
-            state.advanced.isolateGameDirectory) { v -> vm.updateAdvanced { it.copy(isolateGameDirectory = v) } }
     }
     Spacer(Modifier.height(6.dp))
     Text("MobileGlues is required for Sodium and modern OpenGL mods.",
