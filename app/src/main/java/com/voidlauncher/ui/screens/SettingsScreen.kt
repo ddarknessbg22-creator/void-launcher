@@ -243,9 +243,7 @@ private fun GameTab(state: UiState, vm: VoidViewModel) {
     MonoCard {
         SwitchRow("Auto-install game", "Downloads files when you press Play",
             state.advanced.autoInstallGame) { v -> vm.updateAdvanced { it.copy(autoInstallGame = v) } }
-        DividerLine()
-        SwitchRow("Auto-install engine", "Fetches the engine on first launch",
-            state.advanced.autoDownloadEngine) { v -> vm.updateAdvanced { it.copy(autoDownloadEngine = v) } }
+
         DividerLine()
         SwitchRow("Verify downloads", "SHA-1 check every file",
             state.advanced.verifyDownloads) { v -> vm.updateAdvanced { it.copy(verifyDownloads = v) } }
@@ -360,25 +358,38 @@ private fun NetworkTab(state: UiState, vm: VoidViewModel) {
 private fun EngineTab(state: UiState, vm: VoidViewModel) {
     SectionLabel("Game engine")
     MonoCard {
-        state.engines.forEach { e ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(e.displayName, style = MaterialTheme.typography.bodyMedium)
-                    Text(e.note, style = MaterialTheme.typography.labelSmall, color = Grey400)
+        val installed = state.engines.filter { it.installed }
+        if (installed.isEmpty()) {
+            Text("No compatible engine installed", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(4.dp))
+            Text("VOID never installs a second launcher. If you already have a compatible engine, press Rescan.", style = MaterialTheme.typography.labelSmall, color = Grey400)
+        } else {
+            installed.forEach { e ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(e.displayName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Pill("INSTALLED", filled = true)
                 }
-                Pill(if (e.installed) "INSTALLED" else "—", filled = e.installed)
+                Spacer(Modifier.height(8.dp))
             }
+        }
+        val ed = state.engineDownload
+        if (ed.active || ed.error != null) {
+            DividerLine()
             Spacer(Modifier.height(8.dp))
+            Text(ed.stage.ifBlank { "Downloading engine" }, style = MaterialTheme.typography.labelSmall)
+            Spacer(Modifier.height(5.dp))
+            Text(
+                "${com.voidlauncher.util.Net.formatBytes(ed.bytesDone)} / ${com.voidlauncher.util.Net.formatBytes(ed.bytesTotal)}",
+                style = MaterialTheme.typography.labelSmall, color = White,
+            )
+            ed.error?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Danger) }
         }
     }
     Spacer(Modifier.height(10.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         GhostButton("Rescan", { vm.refreshEngines() })
-        GhostButton("Download engine", { vm.downloadEngineNow() })
+        GhostButton("Find engine", { vm.openEngineSource() })
     }
-    Spacer(Modifier.height(10.dp))
-    Text("Engine requires Android install permission. Rendering is performed by the engine.",
-        style = MaterialTheme.typography.labelSmall, color = Grey400)
 }
 
 @Composable

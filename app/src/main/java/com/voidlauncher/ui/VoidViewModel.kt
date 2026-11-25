@@ -13,6 +13,7 @@ import com.voidlauncher.data.ModsRepository
 import com.voidlauncher.data.SettingsRepository
 import com.voidlauncher.data.VersionRepository
 import com.voidlauncher.engine.EngineRepository
+import com.voidlauncher.DownloadService
 import com.voidlauncher.model.AccountType
 import com.voidlauncher.model.AdvancedSettings
 import com.voidlauncher.model.DownloadState
@@ -80,6 +81,7 @@ class VoidViewModel(
     private val root = VoidPaths.root(appContext)
     private var pendingAutoLaunch = false
     private var pendingHandoffVersion: String? = null
+    private val launching = java.util.concurrent.atomic.AtomicBoolean(false)
 
     init {
         viewModelScope.launch {
@@ -109,6 +111,15 @@ class VoidViewModel(
                         installedIds = list.map { v -> v.id }.toSet(),
                         installedVersions = list,
                     )
+                }
+            }
+        }
+        viewModelScope.launch {
+            engines.download.collect { state ->
+                _ui.update { it.copy(engineDownload = state) }
+                if (state.success) {
+                    refreshEngines()
+                    proceedToEngine()
                 }
             }
         }
@@ -347,6 +358,8 @@ class VoidViewModel(
      */
     /** One tap: auto-select defaults, auto-install the game, auto-get the engine, then hand off. */
     fun launchGame() {
+        if (!launching.compareAndSet(false, true)) return
+        try {
         val state = _ui.value
         val account = accounts.byId(state.selectedAccountId) ?: accounts.accounts.firstOrNull()
         if (account == null) {
@@ -365,7 +378,7 @@ class VoidViewModel(
         if (!versions.verifyInstalled(versionId)) {
             if (state.advanced.autoInstallGame) {
                 pendingAutoLaunch = true
-                versions.install(versionId)
+                DownloadService.startVersion(appContext, versionId)
                 notify("Auto-installing $versionId — the engine will open when it finishes")
             } else {
                 notify("$versionId is not installed. Install it from Versions first.")
@@ -373,6 +386,9 @@ class VoidViewModel(
             return
         }
         proceedToEngine()
+        } finally {
+            launching.set(false)
+        }
     }
 
     private fun proceedToEngine() {
@@ -392,11 +408,9 @@ class VoidViewModel(
                 if (major <= 17) {
                     pendingHandoffVersion = versionId
                     notify("Java $major missing — downloading ARM64 runtime")
-                    viewModelScope.launch {
-                        javaRepo.downloadRuntime(JavaRepository.componentFor(details, major), major)
-                            .onSuccess { notify("Java ${it.majorVersion} ready — opening engine") }
-                            .onFailure { notify("Runtime download failed; the engine will try its bundled JRE") }
-                    }
+                    DownloadService.startJava(
+                        appContext, JavaRepository.componentFor(details, major), major,
+                    )
                     return
                 }
                 notify("Java $major is supplied by the engine — handing off")
@@ -407,12 +421,8 @@ class VoidViewModel(
 
         val installedEngines = engines.installedEngines()
         if (installedEngines.isEmpty()) {
-            if (state.advanced.autoDownloadEngine) {
-                downloadAndInstallEngine()
-            } else {
-                settingsRepo.lastLaunchMessage = "No compatible game engine installed"
-                notify("No engine installed — enable auto-download in Settings → Engine")
-            }
+            settingsRepo.lastLaunchMessage = "No compatible game engine installed"
+            notify("No engine installed — VOID does not install a second launcher. See Settings → Engine")
             return
         }
 
@@ -430,63 +440,6 @@ class VoidViewModel(
         } else {
             settingsRepo.lastLaunchMessage = "Could not open ${engine.displayName}"
             notify(result.exceptionOrNull()?.message ?: "Could not open the engine")
-        }
-    }
-
-    fun downloadEngineNow() {
-        if (_ui.value.engineDownload.active) return
-        downloadAndInstallEngine()
-    }
-
-    private fun downloadAndInstallEngine() {
-        viewModelScope.launch {
-            _ui.update {
-                it.copy(
-                    engineDownload = DownloadState(
-                        active = true, stage = "Downloading compatible engine", versionId = "engine",
-                    ),
-                )
-            }
-            val result = withContext(Dispatchers.IO) {
-                engines.downloadEngine(appContext) { done, total ->
-                    _ui.update {
-                        it.copy(
-                            engineDownload = DownloadState(
-                                active = true, versionId = "engine", stage = "Downloading engine",
-                                bytesDone = done, bytesTotal = total,
-                                percent = if (total > 0) done.toFloat() / total else 0f,
-                            ),
-                        )
-                    }
-                }
-            }
-            result.onSuccess { file ->
-                _ui.update {
-                    it.copy(
-                        engineDownload = DownloadState(
-                            active = false, versionId = "engine", stage = "Downloaded", success = true,
-                            bytesDone = file.length(), bytesTotal = file.length(), percent = 1f,
-                        ),
-                    )
-                }
-                val installed = engines.installEngine(appContext, file)
-                if (installed.isSuccess) {
-                    settingsRepo.engineInstallPending = true
-                    notify("Engine downloaded — approve the Android installer")
-                } else {
-                    notify(installed.exceptionOrNull()?.message ?: "Could not open the installer")
-                }
-            }.onFailure { error ->
-                _ui.update {
-                    it.copy(
-                        engineDownload = DownloadState(
-                            active = false, versionId = "engine", stage = "Failed",
-                            error = error.message ?: "Download failed",
-                        ),
-                    )
-                }
-                notify("Engine download failed: ${error.message ?: "unknown error"}")
-            }
         }
     }
 
@@ -618,7 +571,7 @@ class VoidViewModel(
         GameFeature("Java detection", "Reads release descriptors; multiple runtimes", com.voidlauncher.model.FeatureStatus.BUILT_NOT_DEVICE_VERIFIED),
         GameFeature("Microsoft sign-in", "OAuth -> Xbox Live -> XSTS -> Minecraft entitlement", com.voidlauncher.model.FeatureStatus.BUILT_NOT_DEVICE_VERIFIED),
         GameFeature("Mod management", "Jar detection, enable/disable, add/remove", com.voidlauncher.model.FeatureStatus.BUILT_NOT_DEVICE_VERIFIED),
-        GameFeature("Game engine handoff", "Starts an installed compatible launcher with a prepared session", com.voidlauncher.model.FeatureStatus.BUILT_NOT_DEVICE_VERIFIED),
+        GameFeature("Game engine handoff", "Starts an already-installed compatible launcher with a prepared session", com.voidlauncher.model.FeatureStatus.BLOCKED),
         GameFeature("In-app Minecraft rendering", "Requires bundling a native JRE + LWJGL + GL translation stack", com.voidlauncher.model.FeatureStatus.BLOCKED),
         GameFeature("In-app touch controls", "Requires the native engine's input layer", com.voidlauncher.model.FeatureStatus.BLOCKED),
     )

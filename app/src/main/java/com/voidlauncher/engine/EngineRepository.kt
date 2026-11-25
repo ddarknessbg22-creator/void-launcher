@@ -6,6 +6,10 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.core.content.FileProvider
 import com.voidlauncher.model.EngineInfo
+import com.voidlauncher.model.DownloadState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import com.voidlauncher.util.Net
 import com.voidlauncher.util.VoidPaths
 import java.io.File
@@ -25,6 +29,9 @@ private data class EngineDef(
 class EngineRepository(context: Context) {
     private val app = context.applicationContext
     private val pm = app.packageManager
+
+    private val _download = MutableStateFlow(DownloadState())
+    val download: StateFlow<DownloadState> = _download.asStateFlow()
 
     private val known = listOf(
         EngineDef("net.kdt.pojavlaunch", "PojavLauncher", "Most compatible; Android ARM64"),
@@ -74,12 +81,38 @@ class EngineRepository(context: Context) {
         context: Context,
         onProgress: (Long, Long) -> Unit = { _, _ -> },
     ): Result<File> = runCatching {
-        // Tries the GitHub API first, then a stable redirect path if the API is rate limited.
-        val url = Net.resolveEngineApkUrl()
+        _download.value = DownloadState(active = true, stage = "Resolving engine", versionId = "engine")
         val file = File(VoidPaths.exports(VoidPaths.root(context.applicationContext)), "engine-arm64-v8a.apk")
-        Net.downloadToFile(url, file, null, onProgress = onProgress)
-        require(file.length() > 5_000_000L) { "Engine download was incomplete" }
-        file
+        var lastError: Throwable? = null
+        for (url in Net.engineApkUrls()) {
+            try {
+                Net.downloadToFile(
+                    url = url,
+                    destination = file,
+                    expectedSha1 = null,
+                    onProgress = { done, total ->
+                        _download.value = DownloadState(
+                            active = true, versionId = "engine", stage = "Downloading engine",
+                            bytesDone = done, bytesTotal = total,
+                            percent = if (total > 0) done.toFloat() / total else 0f,
+                        )
+                        onProgress(done, total)
+                    },
+                )
+                require(file.length() > 5_000_000L) { "Engine download was incomplete" }
+                _download.value = DownloadState(
+                    active = false, versionId = "engine", stage = "Ready", success = true,
+                    bytesDone = file.length(), bytesTotal = file.length(), percent = 1f,
+                )
+                return runCatching { file }
+            } catch (e: Throwable) {
+                lastError = e
+            }
+        }
+        _download.value = DownloadState(
+            active = false, versionId = "engine", stage = "Failed", error = lastError?.message,
+        )
+        throw lastError ?: IllegalStateException("No engine download URL worked")
     }
 
     /** Hands the downloaded APK to Android's installer. Requires REQUEST_INSTALL_PACKAGES. */

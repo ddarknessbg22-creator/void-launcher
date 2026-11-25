@@ -80,11 +80,11 @@ class MainActivity : ComponentActivity() {
                 return VoidViewModel(
                     appContext = app,
                     accounts = AccountRepository(app),
-                    versions = VersionRepository(app),
-                    settingsRepo = SettingsRepository(app),
-                    javaRepo = JavaRepository(app),
+                    versions = (application as VoidApplication).versions,
+                    settingsRepo = (application as VoidApplication).settings,
+                    javaRepo = (application as VoidApplication).javaRepo,
                     modsRepo = ModsRepository(app),
-                    engines = EngineRepository(app),
+                    engines = (application as VoidApplication).engines,
                     msAuth = MicrosoftAuthRepository(app),
                 ) as T
             }

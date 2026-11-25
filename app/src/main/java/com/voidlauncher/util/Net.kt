@@ -207,9 +207,15 @@ object Net {
                 .find(api)
             if (match != null) return match.groupValues[1]
         }
-        // Fallback: GitHub redirects this stable path to the newest arm64 APK.
         return ENGINE_FALLBACK_APK
     }
+
+    /** Several routes to the same official APK: a DNS or CDN failure on one does not abort the job. */
+    fun engineApkUrls(): List<String> = listOf(
+        ENGINE_FALLBACK_APK,
+        resolveEngineApkUrl(),
+        "https://ghproxy.net/$ENGINE_FALLBACK_APK",
+    ).distinct()
 
     private const val ENGINE_RELEASES_API =
         "https://api.github.com/repos/ZalithLauncher/ZalithLauncher2/releases/latest"

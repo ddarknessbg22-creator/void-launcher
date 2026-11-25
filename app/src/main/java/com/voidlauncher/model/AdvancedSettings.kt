@@ -16,7 +16,6 @@ data class AdvancedSettings(
 
     // Automation & downloads.
     val autoInstallGame: Boolean = true,
-    val autoDownloadEngine: Boolean = true,
     val verifyDownloads: Boolean = true,
     val autoRetry: Boolean = true,
     val downloadThreads: Int = 4,

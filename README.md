@@ -64,17 +64,18 @@ Running Minecraft Java on Android requires a native stack: an Android-compatible
 audio, input, and a GL translation layer (ANGLE / VirGL / GL4ES / **MobileGlues** etc.). That stack is a
 multi-year project of its own. VOID deliberately reuses proven engines instead of pretending to have one:
 
-- It detects installed compatible engines (PojavLauncher, Amethyst, FoldCraft, Zalith, RXLauncher,
-  MCinaBox) through Android package visibility.
-- On **Launch**, it writes a real launch plan (`VOID/exports/void-session-<version>.json`) containing
-  the account, version paths, libraries, assets, Java runtime, options and enabled mods, then opens
-  the chosen engine with an explicit Android intent.
+- It only detects compatible engines that are **already installed**. VOID never installs a second
+  launcher APK; if none is found, it says so honestly and links to the engine source.
+- On **Launch**, game files and any missing Java 8/17 ARM64 runtime are downloaded by a foreground
+  service (so downloads survive leaving the app). It then writes a real launch plan
+  (`VOID/exports/void-session-<version>.json`) and opens an already-installed engine with an explicit
+  Android intent.
 - The engine performs the actual rendering and input. VOID reports honestly that the version must be
   selected inside the engine to start the game.
 
 **Sodium / MobileGlues:** choosing MobileGlues makes VOID prefer ZalithLauncher (whose engine uses
 MobileGlues); choosing ANGLE/GL4ES prefers PojavLauncher. Actual Sodium rendering depends on the
-external engine. VOID does not claim Sodium works.
+external engine. VOID does not claim Sodium works. The selected engine must already be installed.
 
 ---
 
@@ -136,6 +137,8 @@ No root, no special permissions, no background service.
   engine; VOID manages and detects mod jars and loaders.
 - Microsoft sign-in uses the public client id employed by open-source Android launchers; it needs a
   real account with Minecraft ownership and has not been device-verified here.
+- No second launcher APK is downloaded or installed by VOID. Without an already-installed compatible
+  engine, pressing Launch cannot start Minecraft — this is reported rather than faked.
 - Multiplayer: offline profiles only work on servers explicitly configured for offline mode.
 
 ---
