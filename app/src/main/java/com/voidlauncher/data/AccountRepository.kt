@@ -87,7 +87,10 @@ class AccountRepository(context: Context) {
 
     fun delete(accountId: String): Boolean {
         val account = byId(accountId) ?: return false
-        account.tokenAlias?.let { TokenVault.delete(it) }
+        account.tokenAlias?.let { alias ->
+            TokenVault.delete(alias)
+            TokenVault.delete("${alias}_refresh")
+        }
         val remaining = accounts.filter { it.id != accountId }
         val newSelection = when {
             _state.value.selectedId != accountId -> _state.value.selectedId

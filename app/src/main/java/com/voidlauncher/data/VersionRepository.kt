@@ -306,13 +306,16 @@ class VersionRepository(context: Context) {
         return voidJson.decodeFromString<VersionDetails>(file.readText())
     }
 
-    /** True when every jar recorded for this version is still present and non-empty. */
-    fun verifyInstalled(id: String): Boolean {
+    /** Verifies the client jar SHA-1 from cached Mojang metadata plus the cached version JSON. */
+    fun verifyInstalled(id: String): Boolean = runCatching {
         val record = _installed.value.firstOrNull { it.id == id } ?: return false
         val jar = File(record.jarPath)
         val json = File(record.jsonPath)
-        return jar.exists() && jar.length() > 0 && json.exists()
-    }
+        if (!jar.exists() || !json.exists() || jar.length() == 0L) return false
+        val details = voidJson.decodeFromString<VersionDetails>(json.readText())
+        val expected = details.downloads?.client?.sha1 ?: return false
+        Net.sha1(jar).equals(expected, ignoreCase = true)
+    }.getOrDefault(false)
 
     private fun Library.allowedOnAndroid(): Boolean {
         val rules = rules ?: return true

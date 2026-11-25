@@ -32,8 +32,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
 import java.io.File
 
 data class UiState(
@@ -50,17 +48,18 @@ data class UiState(
     val download: DownloadState = DownloadState(),
     val settings: LaunchSettings = LaunchSettings(),
     val advanced: AdvancedSettings = AdvancedSettings(),
-    val engineDownload: DownloadState = DownloadState(),
     val javaDownload: DownloadState = DownloadState(),
     val profiles: List<LaunchProfile> = emptyList(),
     val selectedProfileId: String? = null,
     val selectedVersionId: String? = null,
     val javaRuntimes: List<JavaRuntime> = emptyList(),
     val engines: List<EngineInfo> = emptyList(),
+    val preferredEngine: String? = null,
     val mods: List<ModEntry> = emptyList(),
     val modsVersionId: String? = null,
     val msBusy: Boolean = false,
     val snackbar: String? = null,
+    val lastLaunchMessage: String = "",
     val offlineNotice: Boolean = true,
 )
 
@@ -80,7 +79,9 @@ class VoidViewModel(
 
     private val root = VoidPaths.root(appContext)
     private var pendingAutoLaunch = false
-    private var pendingHandoffVersion: String? = null
+    private var pendingHandoffVersion: String?
+        get() = settingsRepo.pendingHandoffVersion
+        set(value) { settingsRepo.pendingHandoffVersion = value }
     private val launching = java.util.concurrent.atomic.AtomicBoolean(false)
 
     init {
@@ -115,15 +116,6 @@ class VoidViewModel(
             }
         }
         viewModelScope.launch {
-            engines.download.collect { state ->
-                _ui.update { it.copy(engineDownload = state) }
-                if (state.success) {
-                    refreshEngines()
-                    proceedToEngine()
-                }
-            }
-        }
-        viewModelScope.launch {
             versions.download.collect { state ->
                 _ui.update { it.copy(download = state) }
                 if (pendingAutoLaunch && state.success) {
@@ -140,6 +132,7 @@ class VoidViewModel(
                 _ui.update { it.copy(advanced = a) }
                 com.voidlauncher.util.NetConfig.maxAttempts = if (a.autoRetry) 3 else 1
                 com.voidlauncher.util.NetConfig.parallelDownloads = a.downloadThreads
+                com.voidlauncher.util.NetConfig.verifyDownloads = a.verifyDownloads
                     }
         }
         viewModelScope.launch {
@@ -161,11 +154,22 @@ class VoidViewModel(
             it.copy(
                 selectedVersionId = settingsRepo.selectedVersionId,
                 engines = engines.detect(),
+                preferredEngine = settingsRepo.preferredEngine,
+                lastLaunchMessage = settingsRepo.lastLaunchMessage,
                 javaRuntimes = javaRepo.scan(),
                 offlineNotice = settingsRepo.onboardingDone.not(),
             )
         }
         refreshVersions()
+        // Resume a launch that was interrupted by process death (downloads live in the service).
+        pendingHandoffVersion?.let { id ->
+            _ui.update { it.copy(selectedVersionId = id) }
+            settingsRepo.selectedVersionId = id
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(1500)
+                proceedToEngine()
+            }
+        }
     }
 
     // ---------------------------------------------------------------- account
@@ -281,11 +285,13 @@ class VoidViewModel(
     /** Renderer choice really selects the engine that is started on launch. */
     fun setGlImplementation(value: String) {
         settingsRepo.updateAdvanced { it.copy(glImplementation = value) }
-        settingsRepo.preferredEngine = when (value) {
+        val preferred = when (value) {
             "MobileGlues" -> "com.movtery.zalithlauncher"
             "ANGLE", "GL4ES" -> "net.kdt.pojavlaunch"
             else -> null
         }
+        settingsRepo.preferredEngine = preferred
+        _ui.update { it.copy(preferredEngine = preferred) }
         notify("Renderer set to $value · engine preference updated")
     }
 
@@ -309,6 +315,7 @@ class VoidViewModel(
         settingsRepo.selectProfile(id)
         settingsRepo.profiles.value.profiles.firstOrNull { it.id == id }?.let { profile ->
             settingsRepo.selectedVersionId = profile.versionId
+            settingsRepo.updateSettings { it.copy(memoryMb = profile.memoryMb, jvmArgs = profile.jvmArgs) }
             accounts.select(profile.accountId)
             _ui.update { it.copy(selectedVersionId = profile.versionId, modsVersionId = profile.versionId) }
             loadMods(profile.versionId)
@@ -341,6 +348,7 @@ class VoidViewModel(
 
     fun setPreferredEngine(packageName: String?) {
         settingsRepo.preferredEngine = packageName
+        _ui.update { it.copy(preferredEngine = packageName) }
         notify("Engine preference saved")
     }
 
@@ -422,6 +430,7 @@ class VoidViewModel(
         val installedEngines = engines.installedEngines()
         if (installedEngines.isEmpty()) {
             settingsRepo.lastLaunchMessage = "No compatible game engine installed"
+            _ui.update { it.copy(lastLaunchMessage = settingsRepo.lastLaunchMessage) }
             notify("No engine installed — VOID does not install a second launcher. See Settings → Engine")
             return
         }
@@ -436,9 +445,11 @@ class VoidViewModel(
             settingsRepo.lastLaunchMessage =
                 "Session prepared for ${engine.displayName} ($versionId, ${account.username}). " +
                 "Select the version inside the engine to begin rendering."
+            _ui.update { it.copy(lastLaunchMessage = settingsRepo.lastLaunchMessage) }
             notify("Opened ${engine.displayName} · plan: ${planFile.name}")
         } else {
             settingsRepo.lastLaunchMessage = "Could not open ${engine.displayName}"
+            _ui.update { it.copy(lastLaunchMessage = settingsRepo.lastLaunchMessage) }
             notify(result.exceptionOrNull()?.message ?: "Could not open the engine")
         }
     }
@@ -471,11 +482,12 @@ class VoidViewModel(
                 "path" to runtime?.path,
                 "version" to runtime?.version,
                 "requiredMajor" to JavaRepository.requiredMajor(details),
+                "forcedPath" to state.advanced.javaPath.takeIf { state.advanced.javaMode == "Choose" },
+                "selectionMode" to state.advanced.javaMode,
             ),
             "options" to mapOf(
                 "memoryMb" to state.settings.memoryMb,
                 "jvmArgs" to state.settings.jvmArgs,
-                "gameOptionsFile" to "options.txt (written into the game directory)",
             ),
             "advanced" to state.advanced,
             "mods" to mods,
@@ -534,11 +546,24 @@ class VoidViewModel(
             return
         }
         viewModelScope.launch {
-            modsRepo.import(versionId, uri, displayName)
+            val realName = resolveDisplayName(uri, displayName)
+            modsRepo.import(versionId, uri, realName)
                 .onSuccess { notify("Added ${it.name} (${it.loader})") }
                 .onFailure { notify(it.message ?: "Could not import mod") }
             loadMods(versionId)
         }
+    }
+
+    private fun resolveDisplayName(uri: Uri, fallback: String): String {
+        appContext.contentResolver.query(
+            uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) cursor.getString(index)?.let { return it }
+            }
+        }
+        return fallback
     }
 
     // ---------------------------------------------------------------- meta
@@ -605,6 +630,5 @@ class VoidViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        versions.close()
     }
 }

@@ -76,62 +76,7 @@ class EngineRepository(context: Context) {
         context.startActivity(intent)
     }
 
-    /** Downloads the official ARM64 engine release from GitHub. Real bytes, real progress. */
-    fun downloadEngine(
-        context: Context,
-        onProgress: (Long, Long) -> Unit = { _, _ -> },
-    ): Result<File> = runCatching {
-        _download.value = DownloadState(active = true, stage = "Resolving engine", versionId = "engine")
-        val file = File(VoidPaths.exports(VoidPaths.root(context.applicationContext)), "engine-arm64-v8a.apk")
-        var lastError: Throwable? = null
-        for (url in Net.engineApkUrls()) {
-            try {
-                Net.downloadToFile(
-                    url = url,
-                    destination = file,
-                    expectedSha1 = null,
-                    onProgress = { done, total ->
-                        _download.value = DownloadState(
-                            active = true, versionId = "engine", stage = "Downloading engine",
-                            bytesDone = done, bytesTotal = total,
-                            percent = if (total > 0) done.toFloat() / total else 0f,
-                        )
-                        onProgress(done, total)
-                    },
-                )
-                require(file.length() > 5_000_000L) { "Engine download was incomplete" }
-                _download.value = DownloadState(
-                    active = false, versionId = "engine", stage = "Ready", success = true,
-                    bytesDone = file.length(), bytesTotal = file.length(), percent = 1f,
-                )
-                return runCatching { file }
-            } catch (e: Throwable) {
-                lastError = e
-            }
-        }
-        _download.value = DownloadState(
-            active = false, versionId = "engine", stage = "Failed", error = lastError?.message,
-        )
-        throw lastError ?: IllegalStateException("No engine download URL worked")
-    }
-
-    /** Hands the downloaded APK to Android's installer. Requires REQUEST_INSTALL_PACKAGES. */
-    fun installEngine(context: Context, file: File): Result<Unit> = runCatching {
-        val uri: Uri = FileProvider.getUriForFile(
-            context.applicationContext,
-            "${context.packageName}.fileprovider",
-            file,
-        )
-        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
     companion object {
         const val ENGINE_SOURCE_URL = "https://github.com/PojavLauncherTeam/PojavLauncher/releases"
-        const val ENGINE_DOCS_URL = "https://pojav.ru/wiki/getting_started/INSTALL.html"
-        const val RELEASES_API = "https://api.github.com/repos/ZalithLauncher/ZalithLauncher2/releases/latest"
-    }
+            }
 }

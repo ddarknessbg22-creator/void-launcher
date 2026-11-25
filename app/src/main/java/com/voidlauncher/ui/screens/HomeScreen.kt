@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -70,6 +71,7 @@ fun HomeScreen(
             .background(com.voidlauncher.ui.theme.Amoled)
             .verticalScroll(rememberScrollState())
             .windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 20.dp),
     ) {
         Spacer(Modifier.height(10.dp))
@@ -149,8 +151,9 @@ fun HomeScreen(
                     Text(
                         when {
                             state.selectedVersionId == null -> "Latest: ${state.latestRelease}"
-                            installed -> "Installed and verified"
-                            else -> "Not installed — installs automatically on launch"
+                            installed -> "Game files verified on this device"
+                            state.advanced.autoInstallGame -> "Not installed — installs automatically on launch"
+                            else -> "Not installed — install it from Versions"
                         },
                         style = MaterialTheme.typography.labelSmall, color = Grey400,
                     )
@@ -227,32 +230,6 @@ fun HomeScreen(
             }
         }
 
-        val ed = state.engineDownload
-        if (ed.active || ed.error != null) {
-            Spacer(Modifier.height(12.dp))
-            MonoCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp, color = White)
-                    Spacer(Modifier.size(8.dp))
-                    Text("Getting game engine", style = MaterialTheme.typography.labelMedium)
-                }
-                Spacer(Modifier.height(6.dp))
-                LinearProgressIndicator(
-                    progress = { ed.percent }, modifier = Modifier.fillMaxWidth().height(4.dp),
-                    color = White, trackColor = Surface3,
-                )
-                Spacer(Modifier.height(5.dp))
-                Text(
-                    "${Net.formatBytes(ed.bytesDone)} / ${Net.formatBytes(ed.bytesTotal)}  ·  ${(ed.percent * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelSmall, color = Grey400,
-                )
-                ed.error?.let {
-                    Spacer(Modifier.height(6.dp))
-                    Text(it, color = Danger, style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-
         Spacer(Modifier.height(28.dp))
 
         // ---- Launch ----
@@ -260,7 +237,7 @@ fun HomeScreen(
             text = if (installed) "Launch" else "Play",
             onClick = { vm.launchGame() },
             modifier = Modifier.fillMaxWidth(),
-            enabled = state.download.active.not() && state.engineDownload.active.not() && state.javaDownload.active.not(),
+            enabled = state.download.active.not() && state.javaDownload.active.not(),
         )
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
@@ -269,9 +246,13 @@ fun HomeScreen(
                 if (engine != null) White else Grey400, CircleShape))
             Spacer(Modifier.size(7.dp))
             Text(
-                engine?.let { "${it.displayName} ready" }
-                    ?: "Engine required — see Settings → Engine",
+                when {
+                    state.lastLaunchMessage.isNotBlank() -> state.lastLaunchMessage
+                    engine != null -> "${engine.displayName} ready"
+                    else -> "Engine required — see Settings → Engine"
+                },
                 style = MaterialTheme.typography.labelSmall, color = Grey400,
+                maxLines = 2,
             )
         }
 

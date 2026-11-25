@@ -4,7 +4,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -21,6 +20,7 @@
         <package android:name="com.amethyst.launcher" />
         <package android:name="org.fcl.launcher" />
         <package android:name="com.zalith.launcher" />
+        <package android:name="com.movtery.zalithlauncher" />
         <package android:name="com.rxlauncher.app" />
         <package android:name="com.mcinabox.launcher" />
     </queries>
@@ -48,16 +48,16 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".DownloadService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
         <activity
             android:name=".auth.MicrosoftAuthActivity"
             android:exported="false"
             android:theme="@style/Theme.VOID"
             android:configChanges="orientation|screenSize|screenLayout|uiMode" />
+
+        <service
+            android:name=".DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

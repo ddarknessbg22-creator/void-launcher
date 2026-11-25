@@ -17,13 +17,13 @@ class DownloadException(message: String) : IOException(message)
 object NetConfig {
     @Volatile var maxAttempts: Int = 3
     @Volatile var parallelDownloads: Int = 4
+    @Volatile var verifyDownloads: Boolean = true
 }
 
 object Net {
     private const val USER_AGENT = "VOIDLauncher/1.0 (Android; +https://github.com/ddarknessbg22-creator/void-launcher)"
     private const val CONNECT_TIMEOUT = 20_000
     private const val READ_TIMEOUT = 30_000
-    private const val MAX_ATTEMPTS = 3
 
     /** Plain text/JSON fetch. Called from an IO dispatcher. */
     fun fetchText(url: String): String {
@@ -60,7 +60,8 @@ object Net {
         isCancelled: () -> Boolean = { false },
     ) {
         if (isCancelled()) throw CancellationException()
-        if (destination.exists() && expectedSha1 != null && sha1(destination).equals(expectedSha1, true)) {
+        val expected = if (NetConfig.verifyDownloads) expectedSha1 else null
+        if (destination.exists() && expected != null && sha1(destination).equals(expected, true)) {
             onProgress(destination.length(), destination.length())
             return
         }
@@ -99,11 +100,11 @@ object Net {
                 }
 
                 if (isCancelled()) throw CancellationException()
-                if (expectedSha1 != null) {
+                if (expected != null) {
                     val actual = digest.digest().toHex()
-                    if (!actual.equals(expectedSha1, true)) {
+                    if (!actual.equals(expected, true)) {
                         partial.delete()
-                        throw DownloadException("Checksum mismatch for ${destination.name}: expected $expectedSha1, got $actual")
+                        throw DownloadException("Checksum mismatch for ${destination.name}: expected $expected, got $actual")
                     }
                 }
                 if (destination.exists()) destination.delete()
@@ -196,32 +197,6 @@ object Net {
         }
     }
 
-    /**
-     * Resolves an engine APK URL: tries GitHub's latest release API (rate limited),
-     * then falls back to the stable "latest/download" redirect path.
-     */
-    fun resolveEngineApkUrl(): String {
-        val api = runCatching { fetchText(ENGINE_RELEASES_API) }.getOrNull()
-        if (api != null) {
-            val match = Regex("\"browser_download_url\"\\s*:\\s*\"([^\"]*arm64-v8a\\.apk)\"")
-                .find(api)
-            if (match != null) return match.groupValues[1]
-        }
-        return ENGINE_FALLBACK_APK
-    }
-
-    /** Several routes to the same official APK: a DNS or CDN failure on one does not abort the job. */
-    fun engineApkUrls(): List<String> = listOf(
-        ENGINE_FALLBACK_APK,
-        resolveEngineApkUrl(),
-        "https://ghproxy.net/$ENGINE_FALLBACK_APK",
-    ).distinct()
-
-    private const val ENGINE_RELEASES_API =
-        "https://api.github.com/repos/ZalithLauncher/ZalithLauncher2/releases/latest"
-    private const val ENGINE_FALLBACK_APK =
-        "https://github.com/ZalithLauncher/ZalithLauncher2/releases/latest/download/ZalithLauncher-arm64-v8a.apk"
-
     private fun open(url: String): HttpURLConnection {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = CONNECT_TIMEOUT
@@ -241,19 +216,6 @@ object Net {
 
     fun sha1(file: File): String {
         val digest = MessageDigest.getInstance("SHA-1")
-        FileInputStream(file).use { input ->
-            val buffer = ByteArray(64 * 1024)
-            while (true) {
-                val read = input.read(buffer)
-                if (read == -1) break
-                digest.update(buffer, 0, read)
-            }
-        }
-        return digest.digest().toHex()
-    }
-
-    fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
         FileInputStream(file).use { input ->
             val buffer = ByteArray(64 * 1024)
             while (true) {

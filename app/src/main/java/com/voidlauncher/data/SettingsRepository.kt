@@ -46,9 +46,9 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean("auto_select_defaults", true)
         set(value) = prefs.edit().putBoolean("auto_select_defaults", value).apply()
 
-    var engineInstallPending: Boolean
-        get() = prefs.getBoolean("engine_install_pending", false)
-        set(value) = prefs.edit().putBoolean("engine_install_pending", value).apply()
+    var pendingHandoffVersion: String?
+        get() = prefs.getString("pending_handoff_version", null)
+        set(value) = prefs.edit().putString("pending_handoff_version", value).apply()
 
     private fun loadSettings(): LaunchSettings = try {
         val raw = prefs.getString("launch_settings", null)

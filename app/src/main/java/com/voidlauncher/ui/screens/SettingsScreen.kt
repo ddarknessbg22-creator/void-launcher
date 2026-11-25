@@ -235,7 +235,7 @@ private fun GameTab(state: UiState, vm: VoidViewModel) {
         }
     }
     Spacer(Modifier.height(6.dp))
-    Text("Missing runtimes download automatically on launch.",
+    Text("Java 8/17 runtimes download automatically; Java 21+ comes from the engine.",
         style = MaterialTheme.typography.labelSmall, color = Grey400)
 
     Spacer(Modifier.height(16.dp))
@@ -372,23 +372,11 @@ private fun EngineTab(state: UiState, vm: VoidViewModel) {
                 Spacer(Modifier.height(8.dp))
             }
         }
-        val ed = state.engineDownload
-        if (ed.active || ed.error != null) {
-            DividerLine()
-            Spacer(Modifier.height(8.dp))
-            Text(ed.stage.ifBlank { "Downloading engine" }, style = MaterialTheme.typography.labelSmall)
-            Spacer(Modifier.height(5.dp))
-            Text(
-                "${com.voidlauncher.util.Net.formatBytes(ed.bytesDone)} / ${com.voidlauncher.util.Net.formatBytes(ed.bytesTotal)}",
-                style = MaterialTheme.typography.labelSmall, color = White,
-            )
-            ed.error?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Danger) }
-        }
     }
     Spacer(Modifier.height(10.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         GhostButton("Rescan", { vm.refreshEngines() })
-        GhostButton("Find engine", { vm.openEngineSource() })
+
     }
 }
 

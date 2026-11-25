@@ -10,8 +10,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.voidlauncher.data.VersionRepository
-import com.voidlauncher.engine.EngineRepository
+import com.voidlauncher.model.DownloadState
 import com.voidlauncher.util.Net
 import com.voidlauncher.util.VoidPaths
 import kotlinx.coroutines.CoroutineScope
@@ -19,11 +18,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
- * Downloads continue when VOID is closed. The service owns the work; the UI only observes
- * the shared repository StateFlows, so returning to the app always shows live progress.
+ * Downloads keep running after VOID is closed. The UI observes the same app-scoped
+ * repositories, so returning to the app always shows the true live progress.
  */
 class DownloadService : Service() {
 
@@ -37,89 +39,98 @@ class DownloadService : Service() {
         const val EXTRA_COMPONENT = "void.extra.component"
 
         fun startVersion(context: Context, id: String) {
-            val i = Intent(context, DownloadService::class.java).apply {
-                action = ACTION_VERSION
-                putExtra(EXTRA_ID, id)
-            }
-            context.startForegroundService(i)
+            context.startForegroundService(
+                Intent(context, DownloadService::class.java).apply {
+                    action = ACTION_VERSION
+                    putExtra(EXTRA_ID, id)
+                },
+            )
         }
 
         fun startJava(context: Context, component: String, major: Int) {
-            context.startForegroundService(Intent(context, DownloadService::class.java).apply {
-                action = ACTION_JAVA
-                putExtra(EXTRA_COMPONENT, component)
-                putExtra(EXTRA_MAJOR, major)
-            })
+            context.startForegroundService(
+                Intent(context, DownloadService::class.java).apply {
+                    action = ACTION_JAVA
+                    putExtra(EXTRA_COMPONENT, component)
+                    putExtra(EXTRA_MAJOR, major)
+                },
+            )
         }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var job: Job? = null
-    private lateinit var notificationManager: NotificationManager
+    private var workJob: Job? = null
+    private var observerJob: Job? = null
+    private lateinit var notifications: NotificationManager
 
     override fun onCreate() {
         super.onCreate()
-        notificationManager = getSystemService(NotificationManager::class.java)
+        notifications = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            notificationManager.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "VOID game file downloads"
-                },
+            notifications.createNotificationChannel(
+                NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW),
             )
         }
         startForeground(NOTIFICATION_ID, notification("Starting download", 0f, 0L, 0L))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        job?.cancel()
+        workJob?.cancel()
+        observerJob?.cancel()
+
         when (intent?.action) {
             ACTION_VERSION -> {
-                val id = intent.getStringExtra(EXTRA_ID) ?: return STOP_RESULT
+                val id = intent.getStringExtra(EXTRA_ID)
+                if (id.isNullOrBlank()) {
+                    finish("No version specified")
+                    return START_NOT_STICKY
+                }
+                // Reset any stale completed state before observing.
                 val repo = (application as VoidApplication).versions
-                job = scope.launch { repo.install(id).join() }
-                observe(repo.download)
+                workJob = scope.launch { repo.install(id).join() }
+                observerJob = scope.launch { observe(repo.download) }
             }
             ACTION_JAVA -> {
                 val major = intent.getIntExtra(EXTRA_MAJOR, 17)
                 val component = intent.getStringExtra(EXTRA_COMPONENT) ?: "jre-legacy"
                 val repo = (application as VoidApplication).javaRepo
-                job = scope.launch {
-                    repo.downloadRuntime(component, major)
-                    updateNotification("Runtime ready", 1f, 0L, 0L)
+                workJob = scope.launch {
+                    val result = repo.downloadRuntime(component, major)
+                    finish(
+                        if (result.isSuccess) "Runtime ready" else "Runtime failed: ${result.exceptionOrNull()?.message}"
+                    )
                 }
-                observe(repo.download)
+                observerJob = scope.launch { observe(repo.download) }
             }
+            else -> finish("Unknown download task")
         }
         return START_NOT_STICKY
     }
 
-    private fun observe(flow: kotlinx.coroutines.flow.StateFlow<com.voidlauncher.model.DownloadState>) {
-        job = scope.launch {
-            flow.collect { state ->
-                if (state.active) {
-                    updateNotification(
-                        state.stage.ifBlank { "Downloading" }, state.percent,
-                        state.bytesDone, state.bytesTotal,
-                    )
-                } else if (state.success || state.error != null) {
-                    updateNotification(
-                        if (state.success) "Download complete" else "Download failed: ${state.error}",
-                        if (state.success) 1f else 0f, state.bytesDone, state.bytesTotal,
-                    )
+    private suspend fun observe(flow: StateFlow<DownloadState>) {
+        flow.collect { state ->
+            when {
+                state.active -> update(
+                    state.stage.ifBlank { "Downloading" }, state.percent, state.bytesDone, state.bytesTotal,
+                )
+                state.success -> {
+                    update("Download complete", 1f, state.bytesDone, state.bytesTotal)
+                    finish("Download complete")
+                }
+                state.error != null -> {
+                    update("Download failed: ${state.error}", 0f, state.bytesDone, state.bytesTotal)
+                    finish("Download failed: ${state.error}")
                 }
             }
         }
     }
 
-    private fun percentage(done: Long, total: Long): Float =
-        if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else 0f
-
-    private fun updateNotification(text: String, progress: Float, done: Long, total: Long) {
-        notificationManager.notify(NOTIFICATION_ID, notification(text, progress, done, total))
+    private fun update(text: String, progress: Float, done: Long, total: Long) {
+        notifications.notify(NOTIFICATION_ID, notification(text, progress, done, total))
     }
 
     private fun notification(text: String, progress: Float, done: Long, total: Long): Notification {
-        val intent = PendingIntent.getActivity(
+        val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -128,19 +139,25 @@ class DownloadService : Service() {
             .setSmallIcon(R.drawable.ic_stat_download)
             .setContentTitle("VOID Launcher")
             .setContentText(if (detail.isBlank()) text else "$text · $detail")
-            .setContentIntent(intent)
+            .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setProgress(1000, (progress * 1000).toInt(), total <= 0)
             .build()
     }
 
+    private fun finish(message: String) {
+        update(message, 1f, 0L, 0L)
+        stopForeground(STOP_FOREGROUND_DETACH)
+        stopSelf()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        workJob?.cancel()
+        observerJob?.cancel()
         scope.cancel()
         super.onDestroy()
     }
 }
-
-private const val STOP_RESULT = Service.START_NOT_STICKY

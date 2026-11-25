@@ -105,10 +105,12 @@ class MicrosoftAuthRepository(context: Context) {
         var username = "Microsoft Player"
         var uuid = ""
         var xuid: String? = null
+        var email: String? = null
         runCatching {
             val profile = JSONObject(Net.getJson("https://api.minecraftservices.com/minecraft/profile", mcToken))
             username = profile.optString("name", username)
             uuid = profile.optString("id", "")
+            email = profile.optString("email").ifBlank { null }
         }
         runCatching {
             val xstsClaims = xsts.getJSONObject("DisplayClaims").getJSONArray("xui").getJSONObject(0)
@@ -116,10 +118,13 @@ class MicrosoftAuthRepository(context: Context) {
         }
         val entitled = runCatching {
             val store = JSONObject(Net.getJson("https://api.minecraftservices.com/entitlements/mcstore", mcToken))
-            store.getJSONArray("items").length() > 0
+            val items = store.getJSONArray("items")
+            (0 until items.length()).any { items.getJSONObject(it).optString("name") == "minecraft" }
         }.getOrDefault(false)
 
-        return MicrosoftSession(access, refresh, username, uuid, xuid, null, entitled, expires)
+        // The Minecraft services token is what the game actually needs. The Live tokens are
+        // only used for refreshing it, and are stored separately by AccountRepository.
+        return MicrosoftSession(mcToken, refresh, username, uuid, xuid, email, entitled, expires)
     }
 
     companion object {
