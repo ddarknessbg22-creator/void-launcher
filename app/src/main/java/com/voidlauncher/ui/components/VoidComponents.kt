@@ -49,12 +49,6 @@ import com.voidlauncher.ui.theme.Surface2
 import com.voidlauncher.ui.theme.Surface3
 import com.voidlauncher.ui.theme.White
 
-/** No animated backdrop: pure black, zero continuous redraws. */
-@Composable
-fun PortalBackdrop(modifier: Modifier = Modifier) {
-    Box(modifier.background(Amoled))
-}
-
 @Composable
 fun MonoCard(
     modifier: Modifier = Modifier,
