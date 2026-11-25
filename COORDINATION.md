@@ -56,6 +56,25 @@ If the lock exists, keep doing non-device work. Do not delete someone else's loc
 The phone was pattern-locked. Neither agent attempts to bypass it. Ask the user to unlock
 before any screenshot-based gameplay verification.
 
+## Balanced assignments (equal priority)
+
+Agent A — Launcher agent (this chat):
+- Own `void-launcher` repo and `VOIDLauncher/` files only.
+- Keep launcher building/tests passing; produce launcher APK + SHA-256.
+- Finish engine detection, VOID Engine Download button, handoff from Launch, account/version/mods/Java flows.
+- Fix launcher-side bugs, remove dead UI/code, update README/VERIFICATION.md.
+- Do not edit `void-launcher-engine` or its CI.
+
+Agent B — Engine agent (fresh chat):
+- Own `void-launcher-engine` repo and `VOIDEngine/` files only.
+- Verify/fix automatic first-run component extraction; rebuild via existing `Build CI`.
+- Remove remaining runtime Zalith branding; keep GPL notice and attribution.
+- Produce engine APK + SHA-256; install and attempt real Minecraft launch when device is unlocked.
+- Report exact blockers (JRE, LWJGL, GL renderer, first-run UI) from logcat/screenshots.
+- Do not edit `void-launcher` repo.
+
+Neither assignment is subordinate. Both must commit/push their own repo and report honest status.
+
 ## Shared goal
 
 Single installable VOID app that actually launches Minecraft. Until the native engine
