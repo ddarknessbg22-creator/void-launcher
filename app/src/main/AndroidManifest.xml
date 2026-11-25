@@ -21,6 +21,8 @@
         <package android:name="org.fcl.launcher" />
         <package android:name="com.zalith.launcher" />
         <package android:name="com.movtery.zalithlauncher" />
+        <package android:name="com.movtery.zalithlauncher.v2" />
+        <package android:name="com.movtery.zalithlauncher.v2.debug" />
         <package android:name="com.rxlauncher.app" />
         <package android:name="com.mcinabox.launcher" />
     </queries>

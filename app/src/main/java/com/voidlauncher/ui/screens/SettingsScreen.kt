@@ -352,6 +352,18 @@ private fun NetworkTab(state: UiState, vm: VoidViewModel) {
 private fun EngineTab(state: UiState, vm: VoidViewModel) {
     SectionLabel("Game engine")
     MonoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("VOID Engine", style = MaterialTheme.typography.titleMedium)
+                Text("Single-app Minecraft Java engine", style = MaterialTheme.typography.labelSmall, color = Grey400)
+            }
+            if (state.engines.any { it.displayName == "VOID Engine" && it.installed }) {
+                Pill("INSTALLED", filled = true)
+            } else {
+                GhostButton("Download", { vm.downloadVoidEngine() })
+            }
+        }
+        DividerLine(Modifier.padding(vertical = 10.dp))
         val installed = state.engines.filter { it.installed }
         if (installed.isEmpty()) {
             Text("No compatible engine installed", style = MaterialTheme.typography.bodyMedium)

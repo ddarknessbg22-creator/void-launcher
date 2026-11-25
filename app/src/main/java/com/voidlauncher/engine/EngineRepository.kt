@@ -40,6 +40,8 @@ class EngineRepository(context: Context) {
         EngineDef("org.fcl.launcher", "Fold Craft Launcher", "Foldable / large-screen focused"),
         EngineDef("com.zalith.launcher", "ZalithLauncher", "MobileGlues renderer / Sodium friendly"),
         EngineDef("com.movtery.zalithlauncher", "ZalithLauncher", "MobileGlues renderer / Sodium friendly"),
+        EngineDef("com.movtery.zalithlauncher.v2", "VOID Engine", "Single-app Minecraft Java engine"),
+        EngineDef("com.movtery.zalithlauncher.v2.debug", "VOID Engine", "Single-app Minecraft Java engine"),
         EngineDef("com.rxlauncher.app", "RXLauncher", "Mod-focused launcher"),
         EngineDef("com.mcinabox.launcher", "MCinaBox", "Boardwalk-based launcher"),
     )
@@ -78,5 +80,6 @@ class EngineRepository(context: Context) {
 
     companion object {
         const val ENGINE_SOURCE_URL = "https://github.com/PojavLauncherTeam/PojavLauncher/releases"
+        const val VOID_ENGINE_URL = "https://github.com/ddarknessbg22-creator/void-launcher-engine"
             }
 }

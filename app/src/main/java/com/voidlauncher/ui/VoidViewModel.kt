@@ -356,7 +356,14 @@ class VoidViewModel(
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(EngineRepository.ENGINE_SOURCE_URL))
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { appContext.startActivity(intent) }
-            .onFailure { notify("Open ${EngineRepository.ENGINE_SOURCE_URL} to install an engine") }
+            .onFailure { notify("Open ${EngineRepository.ENGINE_SOURCE_URL} to download VOID Engine") }
+    }
+
+    fun downloadVoidEngine() {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(EngineRepository.VOID_ENGINE_URL))
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { appContext.startActivity(intent) }
+            .onFailure { notify("Open ${EngineRepository.VOID_ENGINE_URL} to download VOID Engine") }
     }
 
     /**
