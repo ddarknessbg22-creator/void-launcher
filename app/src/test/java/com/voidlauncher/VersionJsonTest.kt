@@ -12,6 +12,7 @@ class VersionJsonTest {
       "id": "1.21.11",
       "type": "release",
       "assets": "26",
+      "assetIndex": {"url": "https://example.com/index.json", "sha1": "aaa", "size": 100},
       "mainClass": "net.minecraft.client.main.Main",
       "javaVersion": {"component": "java-runtime-delta", "majorVersion": 21},
       "arguments": {
@@ -45,6 +46,12 @@ class VersionJsonTest {
         assertEquals(4, details.arguments?.game?.size)
         assertTrue(details.arguments?.game?.any { it.toString().contains("rules") } == true)
         assertEquals(2, details.libraries.size)
+    }
+
+    @Test
+    fun parsesMojangAssetIndexFieldName() {
+        val details = voidJson.decodeFromString<VersionDetails>(json)
+        assertEquals("https://example.com/index.json", details.assetsIndex?.url)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.voidlauncher.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
@@ -28,6 +29,7 @@ data class VersionDetails(
     val id: String? = null,
     val type: String? = null,
     val assets: String? = null,
+    @SerialName("assetIndex")
     val assetsIndex: DownloadArtifactRef? = null,
     val mainClass: String? = null,
     val inheritsFrom: String? = null,
